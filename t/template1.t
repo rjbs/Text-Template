@@ -3,6 +3,7 @@
 # test apparatus for Text::Template module
 # still incomplete.
 
+use lib '../blib/lib';
 use Text::Template;
 
 print "1..13\n";
@@ -151,13 +152,7 @@ EOM
 
 $result = <<'EOM';
 This line will generate an error:
-Warning
-
-This part of the template:
-	1/0
-
-Returned the following errors:
-	Illegal division by zero at \(.*\) line 2\.
+Program fragment at line 2 delivered error ``Illegal division by zero''
 EOM
 
 
