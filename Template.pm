@@ -2,14 +2,50 @@
 #
 # Fill in `templates'
 #
-# Copyright 1995 M-J. Dominus.
+# Copyright 1996 M-J. Dominus.
 # You may copy and distribute this program under the
 # same terms as Perl iteself.  If in doubt, write to mjd@pobox.com
 # for a license.
 #
-# Version 0.1 alpha $Revision: 1.2 $ $Date: 1995/12/27 18:43:47 $
+# Version 0.1 beta $Revision: 1.4 $ $Date: 1996/01/25 19:31:12 $
 
-=head1 Text::Template
+=head1 NAME 
+
+Text::Template - Expand template text with embedded Perl
+
+=head1 SYNOPSIS
+
+ use Text::Template;
+
+ $template = new Text::Template ('type' => FILE, 'source' => 'f.tmpl');
+   # or
+ $template = new Text::Template ('type' => ARRAY, 
+				 'source' => [ ... ] );
+   # or
+ $template = new Text::Template ('type' => FILEHANDLE, 
+					'source' => $fh );
+
+ $recipient = 'King';
+ $text = $template->fill_in();
+ print $text;
+
+ $T::recipient = 'Josh';
+ $text = $template->fill_in('package' => T);
+ print $text;
+
+ $text = $template->fill_in('broken' => \&callback);
+
+ use Text::Template fill_this_in;
+ $text = fill_this_in( <<EOM, 'package' => T);
+ Dear {$recipient},
+ Pay me at once.
+        Love, 
+         G.V.
+ EOM
+
+ print Text::Template->Version;
+
+=head1 OVERVIEW
 
 This is a library for printing form letters!  This is a library for
 playing Mad Libs!  
@@ -76,19 +112,7 @@ package Text::Template;
 use Exporter ;
 @ISA = qw(Exporter);
 
-=head1 Version
-  Version Text::Template ();
-
-Returns the current version of the C<Text::Template> package.  The
-current version is C<'Text::Template 0.1 alpha $Revision: 1.2 $ $Date: 1995/12/27 18:43:47 $'>.
-
-=cut
-
-sub Version {
-  'Text::Template 0.1 alpha $Revision: 1.2 $ $Date: 1995/12/27 18:43:47 $';
-}
-
-=head1 Constructor: C<new>
+=head2 Constructor: C<new>
 
   new Text::Template ( attribute => value, ... );
 
@@ -145,7 +169,7 @@ sub gensym {
 }
 
 
-=head1 C<fill_in>
+=head2 C<fill_in>
 
 Fills in a template.  Returns the resulting text.
 
@@ -184,7 +208,7 @@ Here's another example:
 		}
 
 			Signed,
-			Lord Chamberlain
+			Lord High Chamberlain
 
 We want to pass in an array which will be assigned to the array
 C<@things>.  Here's how to do that:
@@ -192,22 +216,21 @@ C<@things>.  Here's how to do that:
 	@the_things = ('ivory', 'apes', 'peacocks', );
 	$template->fill_in();
 
-
 This is not very safe.  The reason this isn't as safe is that if you
-had any variables named C<$list> or $<$item> in scope in your program
+had any variables named C<$list> or C<$item> in scope in your program
 at the point you called C<fill_in>, their values would be clobbered by
 the act of filling out the template.  
 
 The next section will show how to make this safer.
 
-=head2 C<package>
+=item C<package>
 
 The value of the C<package> attribute names a package which contains
 the variables that should be used to fill in the template.  If you
 omit the C<package> attribute, C<fill_in> uses the package that was
 active when it was called.
 
-Here's a safer version of the `Lord Chamberlain' example from the
+Here's a safer version of the `Lord High Chamberlain' example from the
 previous section:
 
 	@VARS::the_things = ('ivory', 'apes', 'peacocks', );
@@ -217,8 +240,8 @@ This call to C<fill_in> clobbers C<$VARS::list> and C<$VARS::item>
 instead of clobbering C<$list> and C<$item>.  If your program didn't
 use anything in the C<VARS> package, you don't have to worry that
 filling out the template is altering on your variables.
-	
-=head2 broken 
+
+=item C<broken>
 
 If you specify a value for the C<broken> attribute, it should be a
 reference to a function that C<fill_in> can call if one of the little
@@ -242,25 +265,31 @@ inserts something like this:
 
 	Warning
 
-	This part of the template returned the following errors:
+	This part of the template:
+		1/0
 
-	syntax error at -e line 1, near "$amount;"
-	Missing right bracket at -e line 1, at end of line
-	Execution of -e aborted due to compilation errors.
+	Returned the following errors:
+		Illegal division by zero at (eval 7) line 2.
 
-		
 =cut
 
 sub fill_in {
   my $fi_self = shift;
   my %fi_args = @_;
   my $fi_pack = $fi_args{'package'};
+  my $fi_output;
   
   unless ($fi_pack) {
     ($fi_pack) = caller(1);
   }
 
   my $fi_eval_failed = $fi_args{'broken'} || \&default_broken;
+
+  # Already used up this input source; try to get it back.
+  if ($fi_self->{'lexer'}{'EOF'}) {
+    return undef unless $fi_self->{'lexer'}->rewind();
+    # rewind will set $ERROR for us if it fails
+  }
 
   for (;;) {
     my ($fi_type, $fi_value) = $fi_self->{'lexer'}->get();
@@ -272,7 +301,7 @@ sub fill_in {
     } elsif ($fi_type eq 'PROGTEXT') {
       my $fi_val = eval "package $fi_pack; $fi_value";
       if ($@) {
-	$fi_val = &$fi_eval_failed($fi_value, $@);
+	$fi_val = &$fi_eval_failed('text' => $fi_value, 'error' => $@);
 	return undef unless defined($fi_val);
       } 
       $fi_output .= $fi_val;
@@ -287,18 +316,22 @@ sub default_broken {
   my (%args) = @_;
   my ($prog_text, $error_text) = @args{'text', 'error'};
 
+  $prog_text =~ s/\n/\n\t/m;
+  $error_text =~ s/\n/\n\t/m;
+
   return <<EOM;
 Warning
 
-This part of the template returned the following errors:
+This part of the template:
+	$prog_text
 
-$err_text
+Returned the following errors:
+	$error_text
 
 EOM
 }
 
-
-=head1 C<fill_this_in>
+=head2 C<fill_this_in>
 
 Maybe it's not worth your trouble to put the template into a file;
 maybe it's a small file, and you want to leave it inline in the code.
@@ -333,6 +366,18 @@ sub fill_this_in {
   return $result;
 }
 
+=head1 Version
+  Version Text::Template ();
+
+Returns the current version of the C<Text::Template> package.  The
+current version is C<'Text::Template 0.1 beta $Revision: 1.4 $ $Date: 1996/01/25 19:31:12 $'>.
+
+=cut
+
+sub Version {
+  'Text::Template 0.1 beta $Revision: 1.4 $ $Date: 1996/01/25 19:31:12 $';
+}
+
 =head1 Template Format
 
 Here's the deal with templates: Anything in braces is a little
@@ -350,7 +395,7 @@ If an expression at the beginning of the template has side effects,
 the side effects carry over to the subsequent expressions.  For
 example:
 
-	{$x = @things; ''} The lord high Chamberlain has gotten {$x}
+	{$x = @things; ''} The Lord High Chamberlain has gotten {$x}
 	things for me this year.  
 	{ $diff = $x - 17; 
 	  $more = 'more'
@@ -385,18 +430,21 @@ so B<don't> go filling in templates unless you're sure you know what's in
 them.  This package may eventually use Perl's C<Safe> extension to
 fill in templates in a safe compartment.
 
-=head1 Author
+=head1 AUTHOR
 
 Mark-Jason Dominus, Plover Systems
 
 C<mjd@pobox.com>
 
-=head1 Support?
+=head1 SUPPORT?
 
-This software is version 0.1 alpha.  It probably has bugs.  It is
+This software is version 0.1 beta.  It probably has bugs.  It is
 inadequately tested.  Suggestions and bug reports are always welcome.
 
-=head1 Bugs
+=head1 BUGS AND CAVEATS
+
+This package is in beta testing and should not be used in critical
+applications.
 
 This package should fill in templates in a C<Safe> compartment.
 
@@ -404,11 +452,17 @@ The callback function that C<fill_in> calls when a template contains
 an error should be eble to return an error message to the rest of the
 program.
 
-`my' variables in C<fill_in> are still susceptible to being clobbered
-by template evaluation.  Perhaps it will be safer to make them `local'
-variables.
+C<my> variables in C<fill_in> are still susceptible to being clobbered
+by template evaluation.  Perhaps it will be safer to make them
+C<local> variables.
 
 Maybe there should be a utility method for emptying out a package?
+
+Maybe there should be a utility function for doing C<#include>.
+It would be easy.  (John Cavanaugh, C<sdd@hp.com>)
+
+Maybe there should be a control item for doing #if.  Perl's `if' is
+sufficient, but a little cumbersome to handle the quoting.
 
 =cut
 
@@ -452,8 +506,12 @@ sub new {
     }
     $lexer->{'source'} = $fh;
     $lexer->{'type'} = FILEHANDLE;
+  } elsif ($lexer->{'type'} eq ARRAY) {
+    # Copy input so we can rewind on it if we need to
+    $lexer->{'origsource'} = [ @{$lexer->{'source'}} ];
   }
   $lexer->{'unbuf'} = [ ];
+  $lexer->{'EOF'} = 0;		# Not at EOF yet
   bless $lexer, $package;
 }
 
@@ -515,13 +573,25 @@ sub get_a_char {
   my $self = shift;
   my $c;
 
+  if ($self->{'EOF'}) {
+    return EOF;
+  }
+
   if (@{$self->{'unbuf'}}) {
-    return shift @{$self->{'unbuf'}};
+    my $c = shift @{$self->{'unbuf'}};
+    unless (defined($c)) {
+      $self->EOF;
+      return EOF;
+    }
+    return $c;
   } 
 
   if ($self->{'type'} eq FILEHANDLE) {
     $c = getc($self->{'source'});
-    return EOF if $c eq '';
+    unless (defined($c)) {
+      $self->EOF;
+      return EOF;
+    }
     return $c;
   } elsif ($self->{'type'} eq 'ARRAY') {
     my @nextchars;
@@ -530,7 +600,10 @@ sub get_a_char {
     # array of characters.  If the string is empty, skip it and get
     # another.  If you run out of strings, return EOF.
     until (@nextchars = split(//, shift @{$self->{'source'}})) {
-      return EOF unless @{$self->{'source'}};
+      unless (@{$self->{'source'}}) {
+	$self->EOF;
+	return EOF;
+      }
     }
 
     $c = shift @nextchars;
@@ -547,7 +620,37 @@ sub unget_a_char {
   my $c = shift;
 
   unshift(@{$self->{'unbuf'}}, $c);
+  $self->EOF(0);		# Clear EOF condition
   return;
+}
+
+sub EOF {
+  my $self = shift;
+  my $val = shift;
+
+  # use $val if defined, otherwise default to 1, to set EOF condition
+  $self->{'EOF'} = (defined($val) ? $val : 1);
+}
+
+sub rewind {
+  my $self = shift;
+  my $seek;
+
+  if ($self->{'type'} eq 'FILEHANDLE') {
+    $seek = seek($self->{'source'}, 0, 0);
+    unless ($seek) {
+      $Text::Template::ERROR = "Couldn\'t rewind input source: $!";
+      return undef;
+    }
+  } elsif ($self->{'type'} eq 'ARRAY') {
+    $self->{'source'} = [ @{$self->{'origsource'}} ];
+  } else {
+    $Text::Template::ERROR = 
+	"Unknown input source type: {$self->{'type'}}";
+    return undef;
+  }
+  $self->EOF(0);		# Clear EOF condition
+  return 1;	
 }
 
   

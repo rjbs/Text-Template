@@ -1,10 +1,10 @@
 
-TEXT::TEMPLATE VERSION 0.1 alpha
-27 December, 1995
+TEXT::TEMPLATE VERSION 0.1 beta
+25 January, 1996
 
 COPYRIGHT
 
-The Text::Template module is Copyright 1995 Mark-Jason Dominus.
+The Text::Template module is Copyright 1996 Mark-Jason Dominus.
 You may use, modify, copy, and distribute it under the same terms as
 Perl itself.
 
@@ -16,27 +16,37 @@ is filled in, the perl programs are evaluated, and replaced with their
 values.  This is useful for generating all sorts of program output,
 including HTML pages and error messages.  Templates can reside in
 files external to the program that is filling them in, and they can be
-modified and maintained by persons unfamiliar with perl, because the
-perl parts of a template are encapsulated.
+modified and maintained by persons unfamiliar with Perl, because the
+Perl parts of a template are encapsulated.
 
 PREREQUISITES
 
-None.
+Exporter.
 
 HOW TO BUILD AND INSTALL
 
 	perl Makefile.PL
 	make
-	make install
+	make test
 
-No `test's yet; sorry.
+If it pases the tests, do
+
+	make install
 
 RECENT CHANGES
 
-This is the first general release.
-
-This is an ALPHA release.  Future changes are very likely.  Future
+This is a BETA release.  Future changes are very likely.  Future
 incompatible changes are likely.
+
+Changes from 0.1 alpha:
+
+ * All reported bugs fixed.
+ * You can now apply `fill_in' to the same template object more than once
+   and get a useful result.  If the `source' of the template is a
+   file or filehandle, `fill_in' will rewind the file, if possible.
+ * Some changes and small fixes to documentation.
+ * Default `broken' function is now a little nicer.
+ * Added small test program. 
 
 TODO
 
